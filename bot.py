@@ -391,6 +391,7 @@ def check_all():
 if __name__ == "__main__":
     init_db()
     log.info("🚀 Bot dimulai!")
+    send_telegram("🤖 <b>Crypto CEX Alarm Bot aktif!</b> 🚀")
     check_all()
     scheduler = BlockingScheduler(timezone="UTC")
     scheduler.add_job(check_all, "interval", minutes=CHECK_EVERY, max_instances=1, coalesce=True)
