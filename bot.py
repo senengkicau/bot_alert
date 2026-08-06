@@ -118,7 +118,7 @@ SOURCES = [
     {
         "name": "MEXC",
         "type": "scrape",
-        "url": "https://www.mexc.com/support/sections/360000030572",
+        "url": "https://www.mexc.com/announcements/all",
         "logo": "🔷",
     },
     # ── BingX ──
