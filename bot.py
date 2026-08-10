@@ -15,6 +15,8 @@ CHANNEL_ID  = os.environ.get("CHANNEL_ID")
 CHECK_EVERY = 2
 DB_PATH     = "seen.db"
 
+FIRST_RUN = True   # ← saat True, send_telegram() tidak akan mengirim apa pun (mode diam untuk baseline)
+
 if not BOT_TOKEN or not CHANNEL_ID:
     raise ValueError("BOT_TOKEN dan CHANNEL_ID harus diisi di Railway Variables!")
 
@@ -40,6 +42,8 @@ KEYWORDS = [
     "hard fork", "hardfork", "hard-fork",
     "chain upgrade", "protocol upgrade",
     "software upgrade", "node upgrade", "suspending", "resuming", "suspend", "resume",
+    # Deposit/withdrawal
+    "disable", "disabled", "suspend deposit", "suspend withdrawal",
     # Snapshot
     "snapshot", "airdrop snapshot",
     # Notice
@@ -65,18 +69,13 @@ SOURCES = [
         "logo": "🟡",
         "base_link": "https://www.binance.com/en/support/announcement/",
     },
-    # ── Bybit ──
+    # ── Bybit (scrape halaman utama, filter via keyword) ──
     {
         "name": "Bybit",
-        "type": "bybit_api",
-        "category": "delistings",
+        "type": "bybit_scrape2",
+        "url": "https://announcements.bybit.com/en/",
         "logo": "🟠",
-    },
-    {
-        "name": "Bybit",
-        "type": "bybit_api",
-        "category": "maintenance_updates",
-        "logo": "🟠",
+        "base_link": "https://announcements.bybit.com",
     },
     # ── OKX ──
     {
@@ -92,25 +91,11 @@ SOURCES = [
         "url": "https://api.kucoin.com/api/ua/v1/market/announcement?annType=latest-announcements&lang=en_US&page=1&pageSize=20",
         "logo": "🟢",
     },
-    # ── Gate.io (via __NEXT_DATA__) ──
+    # ── Gate.io (via __NEXT_DATA__, halaman Latest gabungan semua kategori) ──
     {
         "name": "Gate.io",
         "type": "gate_scrape",
-        "url": "https://www.gate.com/announcements/delisted",
-        "logo": "🔵",
-        "base_link": "https://www.gate.com",
-    },
-    {
-        "name": "Gate.io",
-        "type": "gate_scrape",
-        "url": "https://www.gate.com/announcements/deposit-withdrawal",
-        "logo": "🔵",
-        "base_link": "https://www.gate.com",
-    },
-    {
-        "name": "Gate.io",
-        "type": "gate_scrape",
-        "url": "https://www.gate.com/announcements/rename",
+        "url": "https://www.gate.com/announcements/lastest",
         "logo": "🔵",
         "base_link": "https://www.gate.com",
     },
@@ -123,11 +108,11 @@ SOURCES = [
     },
     # ── Bitget ──
     {
-    "name": "Bitget",
-    "type": "bitget_scrape",
-    "url": "https://www.bitget.com/support/sections/12508313443483",
-    "logo": "🟣",
-    "base_link": "https://www.bitget.com",
+        "name": "Bitget",
+        "type": "bitget_scrape",
+        "url": "https://www.bitget.com/support/sections/12508313443483",
+        "logo": "🟣",
+        "base_link": "https://www.bitget.com",
     },
     # ── Poloniex ──
     {
@@ -175,6 +160,8 @@ def is_relevant(text):
 
 # ─── TELEGRAM SENDER ───────────────────────────────────────────────────────────
 def send_telegram(message):
+    if FIRST_RUN:
+        return   # masih baseline, jangan kirim notifikasi apa pun
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": CHANNEL_ID,
@@ -234,48 +221,92 @@ def fetch_binance_api(source):
         log.error(f"❌ Error API Binance: {e}")
 
 
-def fetch_bybit_api(source):
-    """Ambil pengumuman Bybit lewat API resmi, difilter per kategori."""
-    cat = source["category"]
-    log.info(f"🔌 Cek API: Bybit ({cat})")
+def fetch_bybit_scrape2(source):
+    """Scrape halaman utama Bybit announcements (semua kategori), filter via keyword."""
+    log.info(f"🕷️  Scrape: Bybit")
     try:
-        r = requests.get(
-            "https://api.bybit.com/v5/announcements/index",
-            params={"locale": "en-US", "limit": 60, "page": 1},
-            headers=HEADERS,
-            timeout=15,
-        )
-        data = r.json()
-        if data.get("retCode") != 0:
-            log.error(f"❌ Bybit API retCode: {data.get('retCode')} - {data.get('retMsg')}")
+        r = requests.get(source["url"], headers=HEADERS, timeout=15)
+        log.info(f"   → status={r.status_code}, panjang={len(r.text)}")
+
+        # Coba cara 1: data JSON tertanam (__NEXT_DATA__)
+        match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text)
+        articles = []
+
+        if match:
+            try:
+                data = json.loads(match.group(1))
+
+                def find_articles(obj, depth=0):
+                    if depth > 15:
+                        return []
+                    results = []
+                    if isinstance(obj, dict):
+                        if "title" in obj and ("url" in obj or "slug" in obj):
+                            results.append(obj)
+                        for v in obj.values():
+                            results.extend(find_articles(v, depth + 1))
+                    elif isinstance(obj, list):
+                        for item in obj:
+                            results.extend(find_articles(item, depth + 1))
+                    return results
+
+                articles = find_articles(data)
+                log.info(f"   → via __NEXT_DATA__: {len(articles)} item mentah")
+            except Exception as e:
+                log.error(f"   → gagal parse __NEXT_DATA__: {e}")
+
+        if articles:
+            for a in articles:
+                title = a.get("title", "")
+                link = a.get("url", "")
+                if not link and a.get("slug"):
+                    link = f"{source['base_link']}/en-US/article/{a['slug']}/"
+                if not link or len(title) < 10 or not is_relevant(title):
+                    continue
+                if link.startswith("/"):
+                    link = source["base_link"] + link
+                uid = f"bybit_{link.rstrip('/').split('/')[-1]}"
+                if is_seen(uid):
+                    continue
+                mark_seen(uid)
+                send_telegram(format_message(source["logo"], source["name"], title, link))
+                time.sleep(1)
             return
 
-        items = data.get("result", {}).get("list", [])
-        # Filter hanya item dengan kategori yang sesuai
-        items = [a for a in items if a.get("type", {}).get("key") == cat]
-        log.info(f"   → {len(items)} artikel ditemukan")
+        # Fallback cara 2: cari tag <a> dengan pola /article/
+        soup = BeautifulSoup(r.text, "html.parser")
+        links = soup.find_all("a", href=True)
+        log.info(f"   → fallback <a>: total={len(links)}")
 
-        for a in items:
-            title = a.get("title", "")
-            link = a.get("url", "")
-            if not link or not is_relevant(title):
+        seen_uids = set()
+        for a in links:
+            href = a["href"]
+            if "/article/" not in href:
                 continue
-            uid = f"bybit_{link.rstrip('/').split('/')[-1]}"
-            if is_seen(uid):
+            title = a.get_text(strip=True)
+            if len(title) < 10 or not is_relevant(title):
                 continue
+            if href.startswith("/"):
+                href = source["base_link"] + href
+            uid = f"bybit_{href.rstrip('/').split('/')[-1]}"
+            if uid in seen_uids or is_seen(uid):
+                continue
+            seen_uids.add(uid)
             mark_seen(uid)
-            send_telegram(format_message(source["logo"], source["name"], title, link))
+            send_telegram(format_message(source["logo"], source["name"], title, href))
             time.sleep(1)
+
     except Exception as e:
-        log.error(f"❌ Error API Bybit ({cat}): {e}")
+        log.error(f"❌ Error scrape Bybit: {e}")
 
 
 def fetch_gate_scrape(source):
-    """Ambil pengumuman Gate.io lewat data __NEXT_DATA__ di halaman kategori."""
+    """Ambil pengumuman Gate.io lewat data __NEXT_DATA__ di halaman."""
     cat = source["url"].split("/")[-1]
     log.info(f"🕷️  Scrape: Gate.io ({cat})")
     try:
         r = requests.get(source["url"], headers=HEADERS, timeout=15)
+        log.info(f"   → status={r.status_code}, panjang={len(r.text)}")
         match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text)
         if not match:
             log.error(f"❌ Gate.io ({cat}): __NEXT_DATA__ tidak ditemukan (kemungkinan diblokir)")
@@ -411,8 +442,8 @@ def check_all():
         t = source["type"]
         if t == "binance_api":
             fetch_binance_api(source)
-        elif t == "bybit_api":
-            fetch_bybit_api(source)
+        elif t == "bybit_scrape2":
+            fetch_bybit_scrape2(source)
         elif t == "gate_scrape":
             fetch_gate_scrape(source)
         elif t == "kucoin_api":
@@ -427,8 +458,14 @@ def check_all():
 if __name__ == "__main__":
     init_db()
     log.info("🚀 Bot dimulai!")
+
+    log.info("📋 Merekam pengumuman yang sudah ada (tanpa kirim)...")
+    check_all()          # FIRST_RUN masih True → semua send_telegram() di-skip, tapi mark_seen() tetap jalan
+
+    FIRST_RUN = False    # baseline selesai, mulai kirim notifikasi normal
+    log.info("✅ Baseline selesai, mulai monitoring normal.")
     send_telegram("🤖 <b>Crypto CEX Alarm Bot aktif!</b> 🚀")
-    check_all()
+
     scheduler = BlockingScheduler(timezone="UTC")
     scheduler.add_job(check_all, "interval", minutes=CHECK_EVERY, max_instances=1, coalesce=True)
     scheduler.start()
