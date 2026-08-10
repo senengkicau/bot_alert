@@ -1,3 +1,5 @@
+import re
+import json
 import os
 import time
 import sqlite3
@@ -37,7 +39,7 @@ KEYWORDS = [
     "mainnet upgrade", "mainnet launch",
     "hard fork", "hardfork", "hard-fork",
     "chain upgrade", "protocol upgrade",
-    "software upgrade", "node upgrade",
+    "software upgrade", "node upgrade", "suspending", "resuming", "suspend", "resume",
     # Snapshot
     "snapshot", "airdrop snapshot",
     # Notice
@@ -66,17 +68,15 @@ SOURCES = [
     # ── Bybit ──
     {
         "name": "Bybit",
-        "type": "bybit_scrape",
-        "url": "https://announcements.bybit.com/en/?category=delistings&page=1",
+        "type": "bybit_api",
+        "category": "delistings",
         "logo": "🟠",
-        "base_link": "https://announcements.bybit.com",
     },
     {
         "name": "Bybit",
-        "type": "bybit_scrape",
-        "url": "https://announcements.bybit.com/en/?category=maintenance_updates&page=1",
+        "type": "bybit_api",
+        "category": "maintenance_updates",
         "logo": "🟠",
-        "base_link": "https://announcements.bybit.com",
     },
     # ── OKX ──
     {
@@ -92,7 +92,7 @@ SOURCES = [
         "url": "https://api.kucoin.com/api/ua/v1/market/announcement?annType=latest-announcements&lang=en_US&page=1&pageSize=20",
         "logo": "🟢",
     },
-    # ── Gate.io ──
+    # ── Gate.io (via __NEXT_DATA__) ──
     {
         "name": "Gate.io",
         "type": "gate_scrape",
@@ -121,12 +121,13 @@ SOURCES = [
         "url": "https://www.mexc.com/announcements/all",
         "logo": "🔷",
     },
-    # ── BingX ──
+    # ── Bitget ──
     {
-        "name": "BingX",
-        "type": "scrape",
-        "url": "https://bingx.com/en/support/categories/360002065274",
-        "logo": "🟣",
+    "name": "Bitget",
+    "type": "bitget_scrape",
+    "url": "https://www.bitget.com/support/sections/12508313443483",
+    "logo": "🟣",
+    "base_link": "https://www.bitget.com",
     },
     # ── Poloniex ──
     {
@@ -233,90 +234,88 @@ def fetch_binance_api(source):
         log.error(f"❌ Error API Binance: {e}")
 
 
-def fetch_bybit_scrape(source):
-    """Scrape halaman Bybit kategori spesifik (delistings / maintenance_updates)."""
-    cat = source["url"].split("category=")[-1].split("&")[0]
-    log.info(f"🕷️  Scrape: Bybit ({cat})")
+def fetch_bybit_api(source):
+    """Ambil pengumuman Bybit lewat API resmi, difilter per kategori."""
+    cat = source["category"]
+    log.info(f"🔌 Cek API: Bybit ({cat})")
     try:
-        r = requests.get(source["url"], headers=HEADERS, timeout=15)
-        soup = BeautifulSoup(r.text, "html.parser")
+        r = requests.get(
+            "https://api.bybit.com/v5/announcements/index",
+            params={"locale": "en-US", "limit": 60, "page": 1},
+            headers=HEADERS,
+            timeout=15,
+        )
+        data = r.json()
+        if data.get("retCode") != 0:
+            log.error(f"❌ Bybit API retCode: {data.get('retCode')} - {data.get('retMsg')}")
+            return
 
-        seen_uids = set()
-        for a in soup.find_all("a", href=True):
-            href = a["href"]
+        items = data.get("result", {}).get("list", [])
+        # Filter hanya item dengan kategori yang sesuai
+        items = [a for a in items if a.get("type", {}).get("key") == cat]
+        log.info(f"   → {len(items)} artikel ditemukan")
 
-            # Hanya ambil link artikel detail Bybit
-            if "/en/detail/" not in href:
+        for a in items:
+            title = a.get("title", "")
+            link = a.get("url", "")
+            if not link or not is_relevant(title):
                 continue
-
-            # Cari elemen judul terdalam
-            title_tag = a.find(["h1", "h2", "h3", "h4", "p", "span"])
-            if title_tag:
-                title = title_tag.get_text(strip=True)
-            else:
-                title = a.get_text(strip=True)
-
-            # Hapus metadata yang menempel (tanggal, kategori)
-            # Bybit kadang gabungkan judul+tanggal dalam satu string
-            for sep in ["  ", "\n", "\t"]:
-                title = title.split(sep)[0].strip()
-
-            if len(title) < 10 or not is_relevant(title):
+            uid = f"bybit_{link.rstrip('/').split('/')[-1]}"
+            if is_seen(uid):
                 continue
-
-            if href.startswith("/"):
-                href = source["base_link"] + href
-
-            uid = f"bybit_{href.split('/')[-1]}"
-            if uid in seen_uids or is_seen(uid):
-                continue
-
-            seen_uids.add(uid)
             mark_seen(uid)
-            send_telegram(format_message(source["logo"], source["name"], title, href))
+            send_telegram(format_message(source["logo"], source["name"], title, link))
             time.sleep(1)
     except Exception as e:
-        log.error(f"❌ Error scrape Bybit: {e}")
+        log.error(f"❌ Error API Bybit ({cat}): {e}")
 
 
 def fetch_gate_scrape(source):
-    """Scrape halaman Gate.io kategori spesifik (delisted/deposit-withdrawal/rename).
-    Gate.io render via JS tapi data artikel tersedia di tag <a> dengan pola /announcements/article/
-    """
+    """Ambil pengumuman Gate.io lewat data __NEXT_DATA__ di halaman kategori."""
     cat = source["url"].split("/")[-1]
     log.info(f"🕷️  Scrape: Gate.io ({cat})")
     try:
         r = requests.get(source["url"], headers=HEADERS, timeout=15)
-        soup = BeautifulSoup(r.text, "html.parser")
+        match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text)
+        if not match:
+            log.error(f"❌ Gate.io ({cat}): __NEXT_DATA__ tidak ditemukan (kemungkinan diblokir)")
+            return
+
+        data = json.loads(match.group(1))
+
+        def find_articles(obj, depth=0):
+            if depth > 15:
+                return []
+            results = []
+            if isinstance(obj, dict):
+                if "title" in obj and "id" in obj:
+                    results.append(obj)
+                for v in obj.values():
+                    results.extend(find_articles(v, depth + 1))
+            elif isinstance(obj, list):
+                for item in obj:
+                    results.extend(find_articles(item, depth + 1))
+            return results
+
+        articles = find_articles(data)
+        log.info(f"   → {len(articles)} artikel ditemukan")
 
         seen_uids = set()
-        for a in soup.find_all("a", href=True):
-            href = a["href"]
-
-            # Hanya ambil link artikel Gate.io
-            if "/announcements/article/" not in href:
+        for a in articles:
+            title = a.get("title", "")
+            aid = a.get("id", "")
+            if not aid or len(title) < 10 or not is_relevant(title):
                 continue
-
-            title = a.get_text(separator=" ", strip=True)
-
-            if len(title) < 10 or len(title) > 200:
-                continue
-            if not is_relevant(title):
-                continue
-
-            if href.startswith("/"):
-                href = source["base_link"] + href
-
-            uid = f"gate_{href.split('/')[-1]}"
+            uid = f"gate_{aid}"
             if uid in seen_uids or is_seen(uid):
                 continue
-
             seen_uids.add(uid)
             mark_seen(uid)
-            send_telegram(format_message(source["logo"], source["name"], title, href))
+            link = f"{source['base_link']}/announcements/article/{aid}"
+            send_telegram(format_message(source["logo"], source["name"], title, link))
             time.sleep(1)
     except Exception as e:
-        log.error(f"❌ Error scrape Gate.io: {e}")
+        log.error(f"❌ Error scrape Gate.io ({cat}): {e}")
 
 
 def fetch_kucoin_api(source):
@@ -370,6 +369,41 @@ def fetch_scrape(source):
     except Exception as e:
         log.error(f"❌ Error scrape {source['name']}: {e}")
 
+
+def fetch_bitget_scrape(source):
+    """Scrape halaman Announcements Bitget, filter suspending/resuming."""
+    log.info(f"🕷️  Scrape: Bitget")
+    try:
+        r = requests.get(source["url"], headers=HEADERS, timeout=15)
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        seen_uids = set()
+        links = soup.find_all("a", href=True)
+        log.info(f"   → total <a>={len(links)}")
+
+        for a in links:
+            href = a["href"]
+            if "/support/articles/" not in href:
+                continue
+
+            title = a.get_text(strip=True)
+            if len(title) < 10 or not is_relevant(title):
+                continue
+
+            if href.startswith("/"):
+                href = source["base_link"] + href
+
+            uid = f"bitget_{href.rstrip('/').split('/')[-1]}"
+            if uid in seen_uids or is_seen(uid):
+                continue
+
+            seen_uids.add(uid)
+            mark_seen(uid)
+            send_telegram(format_message(source["logo"], source["name"], title, href))
+            time.sleep(1)
+    except Exception as e:
+        log.error(f"❌ Error scrape Bitget: {e}")
+
 # ─── MAIN JOB ──────────────────────────────────────────────────────────────────
 def check_all():
     log.info("🔄 Mulai pengecekan semua CEX...")
@@ -377,12 +411,14 @@ def check_all():
         t = source["type"]
         if t == "binance_api":
             fetch_binance_api(source)
-        elif t == "bybit_scrape":
-            fetch_bybit_scrape(source)
+        elif t == "bybit_api":
+            fetch_bybit_api(source)
         elif t == "gate_scrape":
             fetch_gate_scrape(source)
         elif t == "kucoin_api":
             fetch_kucoin_api(source)
+        elif t == "bitget_scrape":
+            fetch_bitget_scrape(source)
         elif t == "scrape":
             fetch_scrape(source)
     log.info("✅ Selesai pengecekan.")
