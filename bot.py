@@ -35,7 +35,7 @@ KEYWORDS = [
     "token swap", "token rebranding", "rebrand",
     # Ticker & Symbol
     "ticker change", "ticker symbol", "symbol change",
-    "rename", "rebranding",
+    "rename", "rebranding", "Tick Size",
     # Network & Upgrade
     "network upgrade", "network support termination",
     "mainnet upgrade", "mainnet launch",
