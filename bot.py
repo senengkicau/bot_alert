@@ -80,10 +80,9 @@ SOURCES = [
     # ── Bybit (API resmi) ──
     {
         "name": "Bybit",
-        "type": "bybit_api",
-        "url": "https://api.bybit.com/v5/announcements/index",
+        "type": "scrape",
+        "url": "https://announcements.bybit.com/en/",
         "logo": "🟠",
-        "base_link": "https://announcements.bybit.com",
     },
     # ── OKX ──
     {
@@ -228,41 +227,6 @@ def fetch_binance_api(source):
             time.sleep(1)
     except Exception as e:
         log.error(f"❌ Error API Binance: {e}")
-
-
-def fetch_bybit_api(source):
-    log.info("🔌 Cek API: Bybit")
-    try:
-        r = requests.get(
-            source["url"],
-            params={"locale": "en-US", "limit": 60, "page": 1},
-            headers=HEADERS, timeout=15
-        )
-        data = r.json()
-        if data.get("retCode") != 0:
-            log.error(f"❌ Bybit API retCode != 0: {data.get('retMsg')}")
-            return
-
-        items = data.get("result", {}).get("list", [])
-        log.info(f"   → {len(items)} artikel ditemukan")
-
-        for a in items:
-            title = a.get("title", "")
-            url   = a.get("url", "")
-            if not url:
-                slug = re.sub(r'[^a-zA-Z0-9]+', '-', title[:80]).lower().strip('-')
-                url = f"{source['base_link']}/en-US/article/{slug}"
-            if len(title) < 10 or not is_relevant(title):
-                continue
-
-            uid = f"bybit_{url.rstrip('/').split('/')[-1]}"
-            if is_seen(uid):
-                continue
-            mark_seen(uid)
-            send_telegram(format_message(source["logo"], source["name"], title, url))
-            time.sleep(1)
-    except Exception as e:
-        log.error(f"❌ Error API Bybit: {e}")
 
 
 def fetch_gate_api(source):
@@ -425,8 +389,6 @@ def check_all():
         t = source["type"]
         if t == "binance_api":
             fetch_binance_api(source)
-        elif t == "bybit_api":
-            fetch_bybit_api(source)
         elif t == "gate_api":
             fetch_gate_api(source)
         elif t == "kucoin_api":
