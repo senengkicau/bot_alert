@@ -43,7 +43,7 @@ KEYWORDS = [
     "chain upgrade", "protocol upgrade",
     "software upgrade", "node upgrade", "suspending", "resuming", "suspend", "resume",
     # Deposit/withdrawal
-    "disable", "disabled", "suspend deposit", "suspend withdrawal",
+    "disable", "disabled", "suspend deposit", "suspend withdrawal", "Completes Integration",
     # Snapshot
     "snapshot", "airdrop snapshot",
     # Notice
