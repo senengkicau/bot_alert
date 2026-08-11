@@ -69,11 +69,11 @@ SOURCES = [
         "logo": "🟡",
         "base_link": "https://www.binance.com/en/support/announcement/",
     },
-    # ── Bybit (scrape halaman utama, filter via keyword) ──
+    # ── Bybit (API resmi) ──
     {
         "name": "Bybit",
-        "type": "bybit_scrape2",
-        "url": "https://announcements.bybit.com/en/",
+        "type": "bybit_api",
+        "url": "https://api.bybit.com/v5/announcements/index",
         "logo": "🟠",
         "base_link": "https://announcements.bybit.com",
     },
@@ -94,8 +94,9 @@ SOURCES = [
     # ── Gate.io (via __NEXT_DATA__, halaman Latest gabungan semua kategori) ──
     {
         "name": "Gate.io",
-        "type": "gate_scrape",
-        "url": "https://www.gate.com/announcements/lastest",
+        "type": "gate_api",
+        "api_url": "https://www.gate.com/json_svr/query?u=10&type=announcement",
+        "url": "https://www.gate.com/announcements",
         "logo": "🔵",
         "base_link": "https://www.gate.com",
     },
@@ -221,132 +222,106 @@ def fetch_binance_api(source):
         log.error(f"❌ Error API Binance: {e}")
 
 
-def fetch_bybit_scrape2(source):
-    """Scrape halaman utama Bybit announcements (semua kategori), filter via keyword."""
-    log.info(f"🕷️  Scrape: Bybit")
+def fetch_bybit_api(source):
+    log.info("🔌 Cek API: Bybit")
     try:
-        r = requests.get(source["url"], headers=HEADERS, timeout=15)
-        log.info(f"   → status={r.status_code}, panjang={len(r.text)}")
-
-        # Coba cara 1: data JSON tertanam (__NEXT_DATA__)
-        match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text)
-        articles = []
-
-        if match:
-            try:
-                data = json.loads(match.group(1))
-
-                def find_articles(obj, depth=0):
-                    if depth > 15:
-                        return []
-                    results = []
-                    if isinstance(obj, dict):
-                        if "title" in obj and ("url" in obj or "slug" in obj):
-                            results.append(obj)
-                        for v in obj.values():
-                            results.extend(find_articles(v, depth + 1))
-                    elif isinstance(obj, list):
-                        for item in obj:
-                            results.extend(find_articles(item, depth + 1))
-                    return results
-
-                articles = find_articles(data)
-                log.info(f"   → via __NEXT_DATA__: {len(articles)} item mentah")
-            except Exception as e:
-                log.error(f"   → gagal parse __NEXT_DATA__: {e}")
-
-        if articles:
-            for a in articles:
-                title = a.get("title", "")
-                link = a.get("url", "")
-                if not link and a.get("slug"):
-                    link = f"{source['base_link']}/en-US/article/{a['slug']}/"
-                if not link or len(title) < 10 or not is_relevant(title):
-                    continue
-                if link.startswith("/"):
-                    link = source["base_link"] + link
-                uid = f"bybit_{link.rstrip('/').split('/')[-1]}"
-                if is_seen(uid):
-                    continue
-                mark_seen(uid)
-                send_telegram(format_message(source["logo"], source["name"], title, link))
-                time.sleep(1)
+        r = requests.get(
+            source["url"],
+            params={"locale": "en-US", "limit": 60, "page": 1},
+            headers=HEADERS, timeout=15
+        )
+        data = r.json()
+        if data.get("retCode") != 0:
+            log.error(f"❌ Bybit API retCode != 0: {data.get('retMsg')}")
             return
 
-        # Fallback cara 2: cari tag <a> dengan pola /article/
-        soup = BeautifulSoup(r.text, "html.parser")
-        links = soup.find_all("a", href=True)
-        log.info(f"   → fallback <a>: total={len(links)}")
+        items = data.get("result", {}).get("list", [])
+        log.info(f"   → {len(items)} artikel ditemukan")
 
-        seen_uids = set()
-        for a in links:
-            href = a["href"]
-            if "/article/" not in href:
-                continue
-            title = a.get_text(strip=True)
+        for a in items:
+            title = a.get("title", "")
+            url   = a.get("url", "")
+            if not url:
+                slug = re.sub(r'[^a-zA-Z0-9]+', '-', title[:80]).lower().strip('-')
+                url = f"{source['base_link']}/en-US/article/{slug}"
             if len(title) < 10 or not is_relevant(title):
                 continue
-            if href.startswith("/"):
-                href = source["base_link"] + href
-            uid = f"bybit_{href.rstrip('/').split('/')[-1]}"
-            if uid in seen_uids or is_seen(uid):
+
+            uid = f"bybit_{url.rstrip('/').split('/')[-1]}"
+            if is_seen(uid):
                 continue
-            seen_uids.add(uid)
             mark_seen(uid)
-            send_telegram(format_message(source["logo"], source["name"], title, href))
+            send_telegram(format_message(source["logo"], source["name"], title, url))
             time.sleep(1)
-
     except Exception as e:
-        log.error(f"❌ Error scrape Bybit: {e}")
+        log.error(f"❌ Error API Bybit: {e}")
 
 
-def fetch_gate_scrape(source):
-    """Ambil pengumuman Gate.io lewat data __NEXT_DATA__ di halaman."""
-    cat = source["url"].split("/")[-1]
-    log.info(f"🕷️  Scrape: Gate.io ({cat})")
+def fetch_gate_api(source):
+    log.info("🔌 Cek API: Gate.io")
+    articles = []
+
+    # Coba API dulu
     try:
-        r = requests.get(source["url"], headers=HEADERS, timeout=15)
-        log.info(f"   → status={r.status_code}, panjang={len(r.text)}")
-        match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text)
-        if not match:
-            log.error(f"❌ Gate.io ({cat}): __NEXT_DATA__ tidak ditemukan (kemungkinan diblokir)")
+        r = requests.get(source["api_url"], headers=HEADERS, timeout=15)
+        data = r.json()
+        if isinstance(data, dict) and data.get("data"):
+            for item in data["data"]:
+                if isinstance(item, dict) and item.get("title"):
+                    articles.append({
+                        "title": item.get("title", ""),
+                        "id": item.get("id", "")
+                    })
+        log.info(f"   → API: {len(articles)} artikel ditemukan")
+    except Exception as e:
+        log.error(f"   → Gate API gagal: {e}")
+
+    # Fallback: scrape __NEXT_DATA__ dari halaman announcements
+    if not articles:
+        log.info("🕷️  Fallback scrape: Gate.io")
+        try:
+            r = requests.get(source["url"], headers=HEADERS, timeout=15)
+            match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text)
+            if not match:
+                log.error("❌ Gate.io: __NEXT_DATA__ tidak ditemukan (kemungkinan diblokir)")
+                return
+
+            data = json.loads(match.group(1))
+
+            def find_articles(obj, depth=0):
+                if depth > 15:
+                    return []
+                results = []
+                if isinstance(obj, dict):
+                    if "title" in obj and "id" in obj:
+                        results.append(obj)
+                    for v in obj.values():
+                        results.extend(find_articles(v, depth + 1))
+                elif isinstance(obj, list):
+                    for item in obj:
+                        results.extend(find_articles(item, depth + 1))
+                return results
+
+            articles = find_articles(data)
+            log.info(f"   → scrape: {len(articles)} artikel ditemukan")
+        except Exception as e:
+            log.error(f"❌ Error scrape Gate.io: {e}")
             return
 
-        data = json.loads(match.group(1))
-
-        def find_articles(obj, depth=0):
-            if depth > 15:
-                return []
-            results = []
-            if isinstance(obj, dict):
-                if "title" in obj and "id" in obj:
-                    results.append(obj)
-                for v in obj.values():
-                    results.extend(find_articles(v, depth + 1))
-            elif isinstance(obj, list):
-                for item in obj:
-                    results.extend(find_articles(item, depth + 1))
-            return results
-
-        articles = find_articles(data)
-        log.info(f"   → {len(articles)} artikel ditemukan")
-
-        seen_uids = set()
-        for a in articles:
-            title = a.get("title", "")
-            aid = a.get("id", "")
-            if not aid or len(title) < 10 or not is_relevant(title):
-                continue
-            uid = f"gate_{aid}"
-            if uid in seen_uids or is_seen(uid):
-                continue
-            seen_uids.add(uid)
-            mark_seen(uid)
-            link = f"{source['base_link']}/announcements/article/{aid}"
-            send_telegram(format_message(source["logo"], source["name"], title, link))
-            time.sleep(1)
-    except Exception as e:
-        log.error(f"❌ Error scrape Gate.io ({cat}): {e}")
+    seen_uids = set()
+    for a in articles:
+        title = a.get("title", "")
+        aid = a.get("id", "")
+        if not aid or len(title) < 10 or not is_relevant(title):
+            continue
+        uid = f"gate_{aid}"
+        if uid in seen_uids or is_seen(uid):
+            continue
+        seen_uids.add(uid)
+        mark_seen(uid)
+        link = f"{source['base_link']}/announcements/article/{aid}"
+        send_telegram(format_message(source["logo"], source["name"], title, link))
+        time.sleep(1)
 
 
 def fetch_kucoin_api(source):
@@ -442,10 +417,10 @@ def check_all():
         t = source["type"]
         if t == "binance_api":
             fetch_binance_api(source)
-        elif t == "bybit_scrape2":
-            fetch_bybit_scrape2(source)
-        elif t == "gate_scrape":
-            fetch_gate_scrape(source)
+        elif t == "bybit_api":
+            fetch_bybit_api(source)
+        elif t == "gate_api":
+            fetch_gate_api(source)
         elif t == "kucoin_api":
             fetch_kucoin_api(source)
         elif t == "bitget_scrape":
