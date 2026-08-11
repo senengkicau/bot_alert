@@ -28,7 +28,7 @@ KEYWORDS = [
     # Delisting
     "delist", "delisting", "will delist", "to delist",
     "removal", "remove trading pair", "trading pair removal",
-    "cease trading", "suspend trading", "discontinue", "cease support", "temporarily closed",
+    "cease trading", "suspend trading", "discontinue", "cease support", "temporarily closed", "monitoring tag", "ST",
     # Migration & Contract
     "migration", "migrate", "token migration",
     "contract change", "contract address", "new contract",
@@ -66,6 +66,14 @@ SOURCES = [
         "type": "binance_api",
         "catalog_id": 157,
         "url": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=20&catalogId=157",
+        "logo": "🟡",
+        "base_link": "https://www.binance.com/en/support/announcement/",
+    },
+    {
+        "name": "Binance",
+        "type": "binance_api",
+        "catalog_id": 49,
+        "url": "https://www.binance.com/bapi/composite/v1/public/cms/article/list/query?type=1&pageNo=1&pageSize=20&catalogId=49",
         "logo": "🟡",
         "base_link": "https://www.binance.com/en/support/announcement/",
     },
