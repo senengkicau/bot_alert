@@ -28,7 +28,7 @@ KEYWORDS = [
     # Delisting
     "delist", "delisting", "will delist", "to delist",
     "removal", "remove trading pair", "trading pair removal",
-    "cease trading", "suspend trading", "discontinue", "cease support",
+    "cease trading", "suspend trading", "discontinue", "cease support", "temporarily closed",
     # Migration & Contract
     "migration", "migrate", "token migration",
     "contract change", "contract address", "new contract",
@@ -38,7 +38,7 @@ KEYWORDS = [
     "rename", "rebranding", "Tick Size",
     # Network & Upgrade
     "network upgrade", "network support termination",
-    "mainnet upgrade", "mainnet launch",
+    "mainnet upgrade", "mainnet launch", "wallet maintenance",
     "hard fork", "hardfork", "hard-fork",
     "chain upgrade", "protocol upgrade",
     "software upgrade", "node upgrade", "suspending", "resuming", "suspend", "resume",
