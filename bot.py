@@ -5,6 +5,7 @@ import time
 import sqlite3
 import logging
 import requests
+import feedparser
 from datetime import datetime, timezone
 from apscheduler.schedulers.blocking import BlockingScheduler
 from bs4 import BeautifulSoup
@@ -77,11 +78,17 @@ SOURCES = [
         "logo": "🟡",
         "base_link": "https://www.binance.com/en/support/announcement/",
     },
-    # ── Bybit (API resmi) ──
+    # ── Bybit (RSS) ──
     {
         "name": "Bybit",
-        "type": "scrape",
-        "url": "https://announcements.bybit.com/en/",
+        "type": "rss",
+        "url": "https://announcements.bybit.com/en-US/rss/?category=delistings&page=1",
+        "logo": "🟠",
+    },
+    {
+        "name": "Bybit",
+        "type": "rss",
+        "url": "https://announcements.bybit.com/en-US/rss/?category=maintenance_updates&page=1",
         "logo": "🟠",
     },
     # ── OKX ──
@@ -227,6 +234,25 @@ def fetch_binance_api(source):
             time.sleep(1)
     except Exception as e:
         log.error(f"❌ Error API Binance: {e}")
+
+
+def fetch_rss(source: dict):
+    log.info(f"📶 Cek RSS: {source['name']}")
+    try:
+        feed = feedparser.parse(source["url"])
+        for entry in feed.entries:
+            title = entry.get("title", "")
+            link  = entry.get("link", "")
+            uid   = entry.get("id", link)
+            if not uid or not is_relevant(title):
+                continue
+            if is_seen(uid):
+                continue
+            mark_seen(uid)
+            send_telegram(format_message(source["logo"], source["name"], title, link))
+            time.sleep(1)
+    except Exception as e:
+        log.error(f"❌ Error RSS {source['name']}: {e}")
 
 
 def fetch_gate_api(source):
@@ -389,6 +415,8 @@ def check_all():
         t = source["type"]
         if t == "binance_api":
             fetch_binance_api(source)
+        if t == "rss":
+            fetch_rss(source)
         elif t == "gate_api":
             fetch_gate_api(source)
         elif t == "kucoin_api":
