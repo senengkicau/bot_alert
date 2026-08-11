@@ -415,7 +415,7 @@ def check_all():
         t = source["type"]
         if t == "binance_api":
             fetch_binance_api(source)
-        if t == "rss":
+        elif t == "rss":
             fetch_rss(source)
         elif t == "gate_api":
             fetch_gate_api(source)
