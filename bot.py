@@ -38,12 +38,12 @@ KEYWORDS = [
     "rename", "rebranding", "Tick Size",
     # Network & Upgrade
     "network upgrade", "network support termination",
-    "mainnet upgrade", "mainnet launch", "wallet maintenance",
+    "mainnet upgrade", "mainnet launch",
     "hard fork", "hardfork", "hard-fork",
     "chain upgrade", "protocol upgrade",
     "software upgrade", "node upgrade", "suspending", "resuming", "suspend", "resume",
     # Deposit/withdrawal
-    "disable", "disabled", "suspend deposit", "suspend withdrawal", "Completes Integration",
+    "disable", "disabled", "suspend deposit", "suspend withdrawal", "Completes Integration", "maintenance", "wallet maintenance",
     # Snapshot
     "snapshot", "airdrop snapshot",
     # Notice
