@@ -48,7 +48,7 @@ KEYWORDS = [
     # Snapshot
     "snapshot", "airdrop snapshot",
     # Notice
-    "notice of removal", "important notice",
+    "notice of removal", "important notice", "Investment Warning",
 ]
 
 # ─── CEX SOURCES ───────────────────────────────────────────────────────────────
@@ -142,6 +142,14 @@ SOURCES = [
         "type": "scrape",
         "url": "https://www.htx.com/support/",
         "logo": "🟤",
+    },
+        # ── Upbit ──
+    {
+        "name": "Upbit",
+        "type": "upbit_api",
+        "url": "https://pub-info.upbit.com/api/v1/announcements",
+        "logo": "♦️",
+        "base_link": "https://upbit.com/service_center/notice?id=",
     },
 ]
 
@@ -374,6 +382,48 @@ def fetch_scrape(source):
         log.error(f"❌ Error scrape {source['name']}: {e}")
 
 
+def fetch_upbit_api(source):
+    log.info("🔌 Cek API: Upbit")
+    try:
+        headers = {
+            **HEADERS,
+            "Referer": "https://www.upbit.com/",
+            "Accept": "application/json",
+        }
+        r = requests.get(
+            source["url"],
+            params={"os": "web", "page": 1, "per_page": 20, "category": "all"},
+            headers=headers, timeout=15
+        )
+        data = r.json()
+        if not data.get("success"):
+            log.error(f"❌ Upbit API success=false: {data}")
+            return
+
+        notices = data.get("data", {}).get("notices", [])
+        log.info(f"   → {len(notices)} artikel ditemukan")
+
+        for n in notices:
+            title = n.get("title", "")
+            nid = n.get("id", "")
+            if not nid:
+                continue
+
+            # Fokus khusus: hanya "Investment Warning"
+            if "investment warning" not in title.lower():
+                continue
+
+            uid = f"upbit_{nid}"
+            if is_seen(uid):
+                continue
+            mark_seen(uid)
+            link = f"{source['base_link']}{nid}"
+            send_telegram(format_message(source["logo"], source["name"], title, link))
+            time.sleep(1)
+    except Exception as e:
+        log.error(f"❌ Error API Upbit: {e}")
+
+
 def fetch_bitget_scrape(source):
     """Scrape halaman Announcements Bitget, filter suspending/resuming."""
     log.info(f"🕷️  Scrape: Bitget")
@@ -425,6 +475,8 @@ def check_all():
             fetch_bitget_scrape(source)
         elif t == "scrape":
             fetch_scrape(source)
+        elif t == "upbit_api":
+            fetch_upbit_api(source)
     log.info("✅ Selesai pengecekan.")
 
 # ─── ENTRY POINT ───────────────────────────────────────────────────────────────
