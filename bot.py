@@ -14,9 +14,7 @@ from bs4 import BeautifulSoup
 BOT_TOKEN   = os.environ.get("BOT_TOKEN")
 CHANNEL_ID  = os.environ.get("CHANNEL_ID")
 CHECK_EVERY = 2
-DB_PATH     = "seen.db"
-
-FIRST_RUN = True   # ← saat True, send_telegram() tidak akan mengirim apa pun (mode diam untuk baseline)
+DB_PATH     = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH", ".") + "/seen.db"
 
 if not BOT_TOKEN or not CHANNEL_ID:
     raise ValueError("BOT_TOKEN dan CHANNEL_ID harus diisi di Railway Variables!")
@@ -172,6 +170,12 @@ def init_db():
             seen_at TEXT
         )
     """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS meta (
+            key   TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
     con.commit()
     con.close()
 
@@ -187,13 +191,25 @@ def mark_seen(uid):
     con.commit()
     con.close()
 
+def is_baseline_done():
+    con = sqlite3.connect(DB_PATH)
+    row = con.execute("SELECT value FROM meta WHERE key='baseline_done'").fetchone()
+    con.close()
+    return row is not None and row[0] == "1"
+
+def set_baseline_done():
+    con = sqlite3.connect(DB_PATH)
+    con.execute("INSERT OR REPLACE INTO meta VALUES ('baseline_done', '1')")
+    con.commit()
+    con.close()
+
 # ─── KEYWORD CHECK ─────────────────────────────────────────────────────────────
 def is_relevant(text):
     return any(kw in text.lower() for kw in KEYWORDS)
 
 # ─── TELEGRAM SENDER ───────────────────────────────────────────────────────────
 def send_telegram(message):
-    if FIRST_RUN:
+    if not is_baseline_done():
         return   # masih baseline, jangan kirim notifikasi apa pun
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
@@ -467,11 +483,14 @@ if __name__ == "__main__":
     init_db()
     log.info("🚀 Bot dimulai!")
 
-    log.info("📋 Merekam pengumuman yang sudah ada (tanpa kirim)...")
-    check_all()          # FIRST_RUN masih True → semua send_telegram() di-skip, tapi mark_seen() tetap jalan
+    if not is_baseline_done():
+        log.info("📋 Merekam pengumuman yang sudah ada (tanpa kirim)...")
+        check_all()              # baseline_done belum ada → semua send_telegram() di-skip, mark_seen() tetap jalan
+        set_baseline_done()      # ditulis ke DB, jadi tidak akan hilang meski Railway restart
+        log.info("✅ Baseline selesai, mulai monitoring normal.")
+    else:
+        log.info("ℹ️ Baseline sudah pernah dijalankan sebelumnya, langsung mode normal.")
 
-    FIRST_RUN = False    # baseline selesai, mulai kirim notifikasi normal
-    log.info("✅ Baseline selesai, mulai monitoring normal.")
     send_telegram("🤖 <b>Crypto CEX Alarm Bot aktif!</b> 🚀")
 
     scheduler = BlockingScheduler(timezone="UTC")
