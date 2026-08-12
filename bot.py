@@ -24,6 +24,18 @@ if not BOT_TOKEN or not CHANNEL_ID:
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
+GATE_BUILD_ID = "4tF0Ya53s7YztPLYkBAIK"
+
+HEADERS_GATE = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Accept": "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.gate.com/announcements/lastest",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+}
+
 # ─── KEYWORDS ──────────────────────────────────────────────────────────────────
 KEYWORDS = [
     # Delisting
@@ -264,36 +276,36 @@ def fetch_rss(source: dict):
 def fetch_gate_scrape(source):
     log.info(f"🕷️  Scrape: Gate.io")
     try:
-        r = requests.get(source["url"], headers=HEADERS, timeout=15)
-        match = re.search(
-            r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>',
-            r.text, re.DOTALL
-        )
-        if not match:
-            log.error("❌ Gate.io: __NEXT_DATA__ tidak ditemukan")
+        url = f"https://www.gate.com/announcements/_next/data/{GATE_BUILD_ID}/en/announcements/lastest.json?category=lastest"
+        r = requests.get(url, headers=HEADERS_GATE, timeout=15)
+        log.info(f"   → status: {r.status_code} | len: {len(r.text)}")
+
+        if r.status_code == 404:
+            log.error("❌ Gate.io: 404 — kemungkinan build ID sudah berubah, perlu diupdate")
             return
 
-        data = json.loads(match.group(1))
+        if r.status_code != 200:
+            log.error(f"❌ Gate.io: status code {r.status_code}")
+            log.error(f"   cuplikan: {r.text[:300]}")
+            return
+
+        data = r.json()
         articles = (
-            data.get("props", {})
-                .get("pageProps", {})
+            data.get("pageProps", {})
                 .get("listData", {})
                 .get("list", [])
         )
         log.info(f"   → {len(articles)} artikel ditemukan")
-
         for a in articles:
             title = a.get("title", "")
             aid = a.get("id", "")
             url_path = a.get("url", "")
             if not aid or len(title) < 10 or not is_relevant(title):
                 continue
-
             uid = f"gate_{aid}"
             if is_seen(uid):
                 continue
             mark_seen(uid)
-
             link = f"https://www.gate.com{url_path}" if url_path else f"https://www.gate.com/announcements/article/{aid}"
             send_telegram(format_message(source["logo"], source["name"], title, link))
             time.sleep(1)
