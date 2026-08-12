@@ -274,6 +274,7 @@ def fetch_rss(source: dict):
     log.info(f"📶 Cek RSS: {source['name']}")
     try:
         feed = feedparser.parse(source["url"])
+        log.info(f"   → {len(feed.entries)} artikel ditemukan")
         for entry in feed.entries:
             title = entry.get("title", "")
             link  = entry.get("link", "")
@@ -357,8 +358,12 @@ def fetch_scrape(source):
     try:
         r = requests.get(source["url"], headers=HEADERS, timeout=15)
         soup = BeautifulSoup(r.text, "html.parser")
+        links = soup.find_all("a", href=True)
+        log.info(f"   → total <a>={len(links)}")
+
         seen_uids = set()
-        for a in soup.find_all("a", href=True):
+        matched = 0
+        for a in links:
             href  = a["href"]
             title = a.get_text(separator=" ", strip=True)
             if len(title) < 15 or len(title) > 200:
@@ -374,9 +379,11 @@ def fetch_scrape(source):
             if uid in seen_uids or is_seen(uid):
                 continue
             seen_uids.add(uid)
+            matched += 1
             mark_seen(uid)
             send_telegram(format_message(source["logo"], source["name"], title, href))
             time.sleep(1)
+        log.info(f"   → {matched} artikel baru cocok keyword & terkirim")
     except Exception as e:
         log.error(f"❌ Error scrape {source['name']}: {e}")
 
