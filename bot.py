@@ -105,14 +105,12 @@ SOURCES = [
         "url": "https://api.kucoin.com/api/ua/v1/market/announcement?annType=latest-announcements&lang=en_US&page=1&pageSize=20",
         "logo": "🟢",
     },
-    # ── Gate.io (via __NEXT_DATA__, halaman Latest gabungan semua kategori) ──
+    # ── Gate.io ──
     {
         "name": "Gate.io",
-        "type": "gate_api",
-        "api_url": "https://www.gate.com/json_svr/query?u=10&type=announcement",
-        "url": "https://www.gate.com/announcements",
+        "type": "gate_scrape",
+        "url": "https://www.gate.com/announcements/lastest",
         "logo": "🔵",
-        "base_link": "https://www.gate.com",
     },
     # ── MEXC ──
     {
@@ -263,71 +261,44 @@ def fetch_rss(source: dict):
         log.error(f"❌ Error RSS {source['name']}: {e}")
 
 
-def fetch_gate_api(source):
-    log.info("🔌 Cek API: Gate.io")
-    articles = []
-
-    # Coba API dulu
+def fetch_gate_scrape(source):
+    log.info(f"🕷️  Scrape: Gate.io")
     try:
-        r = requests.get(source["api_url"], headers=HEADERS, timeout=15)
-        data = r.json()
-        if isinstance(data, dict) and data.get("data"):
-            for item in data["data"]:
-                if isinstance(item, dict) and item.get("title"):
-                    articles.append({
-                        "title": item.get("title", ""),
-                        "id": item.get("id", "")
-                    })
-        log.info(f"   → API: {len(articles)} artikel ditemukan")
-    except Exception as e:
-        log.error(f"   → Gate API gagal: {e}")
-
-    # Fallback: scrape __NEXT_DATA__ dari halaman announcements
-    if not articles:
-        log.info("🕷️  Fallback scrape: Gate.io")
-        try:
-            r = requests.get(source["url"], headers=HEADERS, timeout=15)
-            match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text)
-            if not match:
-                log.error("❌ Gate.io: __NEXT_DATA__ tidak ditemukan (kemungkinan diblokir)")
-                return
-
-            data = json.loads(match.group(1))
-
-            def find_articles(obj, depth=0):
-                if depth > 15:
-                    return []
-                results = []
-                if isinstance(obj, dict):
-                    if "title" in obj and "id" in obj:
-                        results.append(obj)
-                    for v in obj.values():
-                        results.extend(find_articles(v, depth + 1))
-                elif isinstance(obj, list):
-                    for item in obj:
-                        results.extend(find_articles(item, depth + 1))
-                return results
-
-            articles = find_articles(data)
-            log.info(f"   → scrape: {len(articles)} artikel ditemukan")
-        except Exception as e:
-            log.error(f"❌ Error scrape Gate.io: {e}")
+        r = requests.get(source["url"], headers=HEADERS, timeout=15)
+        match = re.search(
+            r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>',
+            r.text, re.DOTALL
+        )
+        if not match:
+            log.error("❌ Gate.io: __NEXT_DATA__ tidak ditemukan")
             return
 
-    seen_uids = set()
-    for a in articles:
-        title = a.get("title", "")
-        aid = a.get("id", "")
-        if not aid or len(title) < 10 or not is_relevant(title):
-            continue
-        uid = f"gate_{aid}"
-        if uid in seen_uids or is_seen(uid):
-            continue
-        seen_uids.add(uid)
-        mark_seen(uid)
-        link = f"{source['base_link']}/announcements/article/{aid}"
-        send_telegram(format_message(source["logo"], source["name"], title, link))
-        time.sleep(1)
+        data = json.loads(match.group(1))
+        articles = (
+            data.get("props", {})
+                .get("pageProps", {})
+                .get("listData", {})
+                .get("list", [])
+        )
+        log.info(f"   → {len(articles)} artikel ditemukan")
+
+        for a in articles:
+            title = a.get("title", "")
+            aid = a.get("id", "")
+            url_path = a.get("url", "")
+            if not aid or len(title) < 10 or not is_relevant(title):
+                continue
+
+            uid = f"gate_{aid}"
+            if is_seen(uid):
+                continue
+            mark_seen(uid)
+
+            link = f"https://www.gate.com{url_path}" if url_path else f"https://www.gate.com/announcements/article/{aid}"
+            send_telegram(format_message(source["logo"], source["name"], title, link))
+            time.sleep(1)
+    except Exception as e:
+        log.error(f"❌ Error scrape Gate.io: {e}")
 
 
 def fetch_kucoin_api(source):
@@ -467,8 +438,8 @@ def check_all():
             fetch_binance_api(source)
         elif t == "rss":
             fetch_rss(source)
-        elif t == "gate_api":
-            fetch_gate_api(source)
+        elif t == "gate_scrape":
+            fetch_gate_scrape(source)
         elif t == "kucoin_api":
             fetch_kucoin_api(source)
         elif t == "bitget_scrape":
