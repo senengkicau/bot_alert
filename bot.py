@@ -38,7 +38,7 @@ HEADERS_GATE = {
 KEYWORDS = [
     # Delisting
     "delist", "delisting", "will delist", "to delist",
-    "removal", "remove trading pair", "trading pair removal", "end support", "temporarily paused"
+    "removal", "remove trading pair", "trading pair removal", "end support", "temporarily paused",
     "cease trading", "suspend trading", "discontinue", "cease support", "temporarily closed", "monitoring tag", "st tag", "special treatment",
     # Migration & Contract
     "migration", "migrate", "token migration",
@@ -283,10 +283,12 @@ def fetch_rss(source: dict):
         feed = feedparser.parse(source["url"])
         log.info(f"   → {len(feed.entries)} artikel ditemukan")
         for entry in feed.entries:
-            title = entry.get("title", "")
-            link  = entry.get("link", "")
-            uid   = entry.get("id", link)
-            if not uid or not is_relevant(title):
+            title   = entry.get("title", "")
+            summary = entry.get("summary", "")
+            link    = entry.get("link", "")
+            uid     = entry.get("id", link)
+            combined_text = f"{title} {summary}"
+            if not uid or not is_relevant(combined_text):
                 continue
             if is_seen(uid):
                 continue
@@ -345,10 +347,12 @@ def fetch_kucoin_api(source):
         items = data.get("data", {}).get("list", [])
         log.info(f"   → {len(items)} artikel ditemukan")
         for item in items:
-            title = item.get("title", "")
+            title       = item.get("title", "")
+            description = item.get("description", "")
             uid   = str(item.get("id", ""))
             url   = item.get("url", f"https://www.kucoin.com/announcement/{uid}")
-            if not uid or not is_relevant(title):
+            combined_text = f"{title} {description}"
+            if not uid or not is_relevant(combined_text):
                 continue
             uid_key = f"kucoin_{uid}"
             if is_seen(uid_key):
