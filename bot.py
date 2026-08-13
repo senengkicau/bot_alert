@@ -288,8 +288,10 @@ def fetch_binance_api(source):
 def fetch_rss(source: dict):
     log.info(f"📶 Cek RSS: {source['name']}")
     try:
-        feed = feedparser.parse(source["url"])
-        log.info(f"   → {len(feed.entries)} artikel ditemukan")
+        r = requests.get(source["url"], headers=HEADERS, timeout=15)
+        r.raise_for_status()
+        feed = feedparser.parse(r.content)   # <-- parse dari content, bukan langsung URL
+        log.info(f"   → status:{r.status_code} | {len(feed.entries)} artikel ditemukan")
         for entry in feed.entries:
             title   = entry.get("title", "")
             summary = entry.get("summary", "")
