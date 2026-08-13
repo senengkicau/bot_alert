@@ -91,16 +91,8 @@ SOURCES = [
     # ── Bybit ──
     {
         "name": "Bybit",
-        "type": "bybit_api",
-        "ann_type": "delistings",
-        "url": "https://api.bybit.com/v5/announcements/index",
-        "logo": "🟠",
-    },
-    {
-        "name": "Bybit",
-        "type": "bybit_api",
-        "ann_type": "maintenance_updates",
-        "url": "https://api.bybit.com/v5/announcements/index",
+        "type": "scrape",
+        "url": "https://announcements.bybit.com/en/?category=&page=1",
         "logo": "🟠",
     },
     # ── Bitfinex ──
@@ -379,38 +371,6 @@ def fetch_bitfinex_api(source):
         log.error(f"❌ Error API Bitfinex: {e}")
 
 
-def fetch_bybit_api(source):
-    log.info(f"🔌 Cek API: Bybit ({source['ann_type']})")
-    try:
-        params = {
-            "locale": "en-US",
-            "type": source["ann_type"],
-            "page": 1,
-            "limit": 20,
-        }
-        r = requests.get(source["url"], headers=HEADERS, params=params, timeout=15)
-        data = r.json()
-        items = data.get("result", {}).get("list", [])
-        log.info(f"   → {len(items)} artikel ditemukan")
-        for item in items:
-            title = item.get("title", "")
-            desc  = item.get("description", "")
-            link  = item.get("url", "")
-            if not link:
-                continue
-            combined_text = f"{title} {desc}"
-            if not is_relevant(combined_text):
-                continue
-            uid = f"bybit_{link}"
-            if is_seen(uid):
-                continue
-            mark_seen(uid)
-            send_telegram(format_message(source["logo"], source["name"], title, link))
-            time.sleep(1)
-    except Exception as e:
-        log.error(f"❌ Error API Bybit: {e}")
-
-
 def fetch_kucoin_api(source):
     log.info("🔌 Cek API: KuCoin")
     try:
@@ -560,8 +520,6 @@ def check_all():
             fetch_gate_scrape(source)
         elif t == "kucoin_api":
             fetch_kucoin_api(source)
-        elif t == "bybit_api":
-            fetch_bybit_api(source)
         elif t == "bitget_scrape":
             fetch_bitget_scrape(source)
         elif t == "bitfinex_api":
