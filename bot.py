@@ -105,10 +105,10 @@ SOURCES = [
     },
     # ── Coinbase ──
     {
-    "name": "Coinbase",
-    "type": "rss",
-    "url": "https://status.coinbase.com/history.rss",
-    "logo": "⚪",
+        "name": "Coinbase",
+        "type": "rss",
+        "url": "https://status.coinbase.com/history.rss",
+        "logo": "⚪",
     },
     # ── OKX ──
     {
@@ -458,7 +458,7 @@ def fetch_upbit_api(source):
             if not nid:
                 continue
 
-            # Fokus khusus: hanya "Investment Warning"
+            # Fokus khusus: hanya "investment warning"
             if "investment warning" not in title.lower():
                 continue
 
