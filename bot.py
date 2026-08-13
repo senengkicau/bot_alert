@@ -43,7 +43,7 @@ KEYWORDS = [
     # Migration & Contract
     "migration", "migrate", "token migration",
     "contract change", "contract address", "new contract",
-    "token swap", "token rebranding", "rebrand",
+    "token swap", "token rebranding", "rebrand", "transition", "discontinuation",
     # Ticker & Symbol
     "ticker change", "ticker symbol", "symbol change",
     "rename", "rebranding", "tick size",
@@ -100,6 +100,14 @@ SOURCES = [
         "type": "rss",
         "url": "https://announcements.bybit.com/en-US/rss/?category=maintenance_updates&page=1",
         "logo": "🟠",
+    },
+    # ── Bitfinex ──
+    {
+        "name": "Bitfinex",
+        "type": "bitfinex_api",
+        "url": "https://api-pub.bitfinex.com/v2/posts/hist?limit=20&type=1",
+        "logo": "🟢",
+        "base_link": "https://www.bitfinex.com/posts/",
     },
     # ── Coinbase ──
     {
@@ -339,6 +347,34 @@ def fetch_gate_scrape(source):
         log.error(f"❌ Error scrape Gate.io: {e}")
 
 
+def fetch_bitfinex_api(source):
+    log.info("🔌 Cek API: Bitfinex")
+    try:
+        r = requests.get(source["url"], headers=HEADERS, timeout=15)
+        items = r.json()
+        log.info(f"   → {len(items)} artikel ditemukan")
+        for item in items:
+            if not isinstance(item, list) or len(item) < 5:
+                continue
+            post_id = item[0]
+            title   = item[3] or ""
+            body    = item[4] or ""
+            if not post_id:
+                continue
+            combined_text = f"{title} {body}"
+            if not is_relevant(combined_text):
+                continue
+            uid = f"bitfinex_{post_id}"
+            if is_seen(uid):
+                continue
+            mark_seen(uid)
+            link = f"{source['base_link']}{post_id}"
+            send_telegram(format_message(source["logo"], source["name"], title, link))
+            time.sleep(1)
+    except Exception as e:
+        log.error(f"❌ Error API Bitfinex: {e}")
+
+
 def fetch_kucoin_api(source):
     log.info("🔌 Cek API: KuCoin")
     try:
@@ -490,6 +526,8 @@ def check_all():
             fetch_kucoin_api(source)
         elif t == "bitget_scrape":
             fetch_bitget_scrape(source)
+        elif t == "bitfinex_api":
+            fetch_bitfinex_api(source)
         elif t == "scrape":
             fetch_scrape(source)
         elif t == "upbit_api":
