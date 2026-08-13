@@ -39,14 +39,14 @@ KEYWORDS = [
     # Delisting
     "delist", "delisting", "will delist", "to delist",
     "removal", "remove trading pair", "trading pair removal",
-    "cease trading", "suspend trading", "discontinue", "cease support", "temporarily closed", "monitoring tag", "ST",
+    "cease trading", "suspend trading", "discontinue", "cease support", "temporarily closed", "monitoring tag", "st tag", "special treatment",
     # Migration & Contract
     "migration", "migrate", "token migration",
     "contract change", "contract address", "new contract",
     "token swap", "token rebranding", "rebrand",
     # Ticker & Symbol
     "ticker change", "ticker symbol", "symbol change",
-    "rename", "rebranding", "Tick Size",
+    "rename", "rebranding", "tick size",
     # Network & Upgrade
     "network upgrade", "network support termination",
     "mainnet upgrade", "mainnet launch",
@@ -58,7 +58,7 @@ KEYWORDS = [
     # Snapshot
     "snapshot", "airdrop snapshot",
     # Notice
-    "notice of removal", "important notice", "Investment Warning",
+    "notice of removal", "important notice", "investment warning",
 ]
 
 # ─── CEX SOURCES ───────────────────────────────────────────────────────────────
