@@ -38,7 +38,7 @@ HEADERS_GATE = {
 KEYWORDS = [
     # Delisting
     "delist", "delisting", "will delist", "to delist",
-    "removal", "remove trading pair", "trading pair removal",
+    "removal", "remove trading pair", "trading pair removal", "end support", "temporarily paused"
     "cease trading", "suspend trading", "discontinue", "cease support", "temporarily closed", "monitoring tag", "st tag", "special treatment",
     # Migration & Contract
     "migration", "migrate", "token migration",
@@ -100,6 +100,13 @@ SOURCES = [
         "type": "rss",
         "url": "https://announcements.bybit.com/en-US/rss/?category=maintenance_updates&page=1",
         "logo": "🟠",
+    },
+    # ── Coinbase ──
+    {
+    "name": "Coinbase",
+    "type": "rss",
+    "url": "https://status.coinbase.com/history.rss",
+    "logo": "⚪",
     },
     # ── OKX ──
     {
