@@ -9,6 +9,7 @@ import feedparser
 from datetime import datetime, timezone
 from apscheduler.schedulers.blocking import BlockingScheduler
 from bs4 import BeautifulSoup
+from deep_translator import GoogleTranslator
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────────
 BOT_TOKEN   = os.environ.get("BOT_TOKEN")
@@ -60,6 +61,45 @@ KEYWORDS = [
     # Notice
     "notice of removal", "important notice", "investment warning",
 ]
+
+# ─── UPBIT KEYWORDS (Korea + Inggris) ─────────────────────────────────────────
+UPBIT_KEYWORDS = [
+    # English (judul kategori "caution/warning" kadang ditulis Inggris)
+    "investment warning",
+    "delisting",
+    "trading support termination",
+ 
+    # Korean — delisting final
+    "거래지원 종료",
+    "상장폐지",
+ 
+    # Korean — caution / early-warning stage (거래 유의 종목)
+    "유의 종목",
+    "유의종목",
+    "투자유의",
+ 
+    # Korean — deposit/withdrawal suspension (sering menyertai caution/delisting)
+    "입출금 중단",
+    "입출금 일시 중단",
+]
+
+def is_relevant_upbit(text: str) -> bool:
+    """Cek keyword Upbit terhadap title (dan body kalau ada). Aman untuk teks
+    campuran Korea+Inggris karena .lower() tidak mempengaruhi karakter Hangul."""
+    text_lower = text.lower()
+    return any(kw.lower() in text_lower for kw in UPBIT_KEYWORDS)
+ 
+ 
+def translate_to_en(text: str) -> str:
+    """Translate teks (Korea/campuran) ke Inggris untuk ditampilkan di Telegram.
+    Fallback ke teks asli kalau translate gagal, supaya notifikasi tetap terkirim."""
+    if not text:
+        return text
+    try:
+        return GoogleTranslator(source="auto", target="en").translate(text)
+    except Exception as e:
+        log.error(f"⚠️ Gagal translate Upbit title: {e}")
+        return text
 
 # ─── CEX SOURCES ───────────────────────────────────────────────────────────────
 SOURCES = [
@@ -448,29 +488,65 @@ def fetch_upbit_api(source):
         if not data.get("success"):
             log.error(f"❌ Upbit API success=false: {data}")
             return
-
+ 
         notices = data.get("data", {}).get("notices", [])
         log.info(f"   → {len(notices)} artikel ditemukan")
-
+ 
         for n in notices:
             title = n.get("title", "")
-            nid = n.get("id", "")
+            nid   = n.get("id", "")
             if not nid:
                 continue
-
-            # Fokus khusus: hanya "investment warning"
-            if "investment warning" not in title.lower():
+ 
+            # Cek field body/content kalau ternyata tersedia di response API.
+            # Kalau tidak ada field ini, body_text akan kosong dan filter jatuh
+            # ke title saja (perilaku sama seperti sebelumnya).
+            body_text = (
+                n.get("content")
+                or n.get("body")
+                or n.get("description")
+                or ""
+            )
+            combined_text = f"{title} {body_text}"
+ 
+            if not is_relevant_upbit(combined_text):
                 continue
-
+ 
             uid = f"upbit_{nid}"
             if is_seen(uid):
                 continue
             mark_seen(uid)
+ 
+            title_en = translate_to_en(title)
             link = f"{source['base_link']}{nid}"
-            send_telegram(format_message(source["logo"], source["name"], title, link))
+            send_telegram(format_message(source["logo"], source["name"], title_en, link))
             time.sleep(1)
     except Exception as e:
         log.error(f"❌ Error API Upbit: {e}")
+ 
+ 
+# ─── OPSIONAL: fetch body sungguhan dari halaman detail notice ────────────────
+# Aktifkan kalau kamu mau cek isi lengkap notice (bukan cuma title), karena
+# API list Upbit kemungkinan besar TIDAK menyertakan body di response-nya.
+# Konsekuensi: 1 request tambahan per notice yang belum "seen", jadi jangan
+# dipakai untuk semua notice sekaligus, cukup untuk yang lolos filter title dulu.
+ 
+def fetch_upbit_notice_body(notice_id: str) -> str:
+    """Ambil isi body notice dari halaman detail Upbit (best-effort scrape)."""
+    try:
+        url = f"https://www.upbit.com/service_center/notice?id={notice_id}&view=share"
+        r = requests.get(url, headers=HEADERS, timeout=15)
+        soup = BeautifulSoup(r.text, "html.parser")
+        # Upbit render halaman ini pakai JS (SPA), jadi requests+bs4 biasa
+        # kemungkinan besar TIDAK akan mendapat isi body (hanya shell HTML).
+        # Kalau butuh body asli, perlu headless browser (playwright/selenium)
+        # atau cari endpoint API detail-nya (bukan endpoint list yang dipakai
+        # sekarang). Fungsi ini disediakan sebagai starting point saja.
+        body = soup.get_text(separator=" ", strip=True)
+        return body
+    except Exception as e:
+        log.error(f"⚠️ Gagal fetch detail notice Upbit {notice_id}: {e}")
+        return ""
 
 
 def fetch_bitget_scrape(source):
