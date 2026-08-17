@@ -52,7 +52,7 @@ KEYWORDS = [
     "network upgrade", "network support termination",
     "mainnet upgrade", "mainnet launch",
     "hard fork", "hardfork", "hard-fork",
-    "chain upgrade", "protocol upgrade",
+    "chain upgrade", "protocol upgrade", "suspension",
     "software upgrade", "node upgrade", "suspending", "resuming", "suspend", "resume",
     # Deposit/withdrawal
     "disable", "disabled", "suspend deposit", "suspend withdrawal", "completes integration", "maintenance", "wallet maintenance",
