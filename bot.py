@@ -23,7 +23,7 @@ if not BOT_TOKEN or not CHANNEL_ID:
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
-GATE_BUILD_ID = "YeDdTRlUNLLMShCIuRhJV"
+GATE_BUILD_ID_CACHE = {"id": None}
 
 HEADERS_GATE = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
@@ -343,16 +343,46 @@ def fetch_rss(source: dict):
         log.error(f"❌ Error RSS {source['name']}: {e}")
 
 
+def get_gate_build_id():
+    """Ambil buildId terbaru dari halaman HTML Gate.io."""
+    try:
+        r = requests.get("https://www.gate.com/announcements/lastest", headers=HEADERS, timeout=15)
+        match = re.search(r'"buildId":"([^"]+)"', r.text)
+        if match:
+            return match.group(1)
+        return None
+    except Exception as e:
+        log.error(f"⚠️ Gagal ambil Gate buildId: {e}")
+        return None
+
+
 def fetch_gate_scrape(source):
     log.info(f"🕷️  Scrape: Gate.io")
     try:
-        url = f"https://www.gate.com/cdn/fe/_next/data/{GATE_BUILD_ID}/en/announcements/lastest.json?category=lastest"
+        build_id = GATE_BUILD_ID_CACHE["id"]
+        if not build_id:
+            build_id = get_gate_build_id()
+            GATE_BUILD_ID_CACHE["id"] = build_id
+
+        if not build_id:
+            log.error("❌ Gate.io: gagal mendapatkan buildId")
+            return
+
+        url = f"https://www.gate.com/announcements/_next/data/{build_id}/en/announcements/lastest.json?category=lastest"
         r = requests.get(url, headers=HEADERS_GATE, timeout=15)
         log.info(f"   → status: {r.status_code} | len: {len(r.text)}")
 
         if r.status_code == 404:
-            log.error("❌ Gate.io: 404 — kemungkinan build ID sudah berubah, perlu diupdate")
-            return
+            log.warning("⚠️ Gate.io: 404 — buildId basi, refresh dan coba ulang sekali")
+            GATE_BUILD_ID_CACHE["id"] = None
+            build_id = get_gate_build_id()
+            if not build_id:
+                log.error("❌ Gate.io: gagal refresh buildId")
+                return
+            GATE_BUILD_ID_CACHE["id"] = build_id
+            url = f"https://www.gate.com/announcements/_next/data/{build_id}/en/announcements/lastest.json?category=lastest"
+            r = requests.get(url, headers=HEADERS_GATE, timeout=15)
+            log.info(f"   → retry status: {r.status_code} | len: {len(r.text)}")
 
         if r.status_code != 200:
             log.error(f"❌ Gate.io: status code {r.status_code}")
