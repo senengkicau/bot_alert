@@ -59,7 +59,7 @@ KEYWORDS = [
     # Snapshot
     "snapshot", "airdrop snapshot",
     # Notice
-    "notice of removal", "important notice", "investment warning", "important",
+    "notice of removal", "important notice", "investment warning",
 ]
 
 # ─── UPBIT KEYWORDS (Korea + Inggris) ─────────────────────────────────────────
