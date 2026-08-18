@@ -44,7 +44,7 @@ KEYWORDS = [
     # Migration & Contract
     "migration", "migrate", "token migration", "contract swap",
     "contract change", "contract address", "new contract", "token swap",
-    "token swap", "token rebranding", "rebrand", "transition", "discontinuation",
+    "token rebranding", "rebrand", "transition", "discontinuation", "discontinue",
     # Ticker & Symbol
     "ticker change", "ticker symbol", "symbol change",
     "rename", "rebranding", "tick size",
@@ -59,40 +59,36 @@ KEYWORDS = [
     # Snapshot
     "snapshot", "airdrop snapshot",
     # Notice
-    "notice of removal", "important notice", "investment warning",
+    "notice of removal", "important notice", "investment warning", "important",
 ]
 
 # ─── UPBIT KEYWORDS (Korea + Inggris) ─────────────────────────────────────────
 UPBIT_KEYWORDS = [
-    # English (judul kategori "caution/warning" kadang ditulis Inggris)
+    # English 
     "investment warning",
     "delisting",
     "trading support termination",
  
-    # Korean — delisting final
+    # Korean — delisting
     "거래지원 종료",
     "상장폐지",
  
-    # Korean — caution / early-warning stage (거래 유의 종목)
+    # Korean — caution/early-warning stage
     "유의 종목",
     "유의종목",
     "투자유의",
  
-    # Korean — deposit/withdrawal suspension (sering menyertai caution/delisting)
+    # Korean — deposit/withdrawal suspension
     "입출금 중단",
     "입출금 일시 중단",
 ]
 
 def is_relevant_upbit(text: str) -> bool:
-    """Cek keyword Upbit terhadap title (dan body kalau ada). Aman untuk teks
-    campuran Korea+Inggris karena .lower() tidak mempengaruhi karakter Hangul."""
     text_lower = text.lower()
     return any(kw.lower() in text_lower for kw in UPBIT_KEYWORDS)
  
  
 def translate_to_en(text: str) -> str:
-    """Translate teks (Korea/campuran) ke Inggris untuk ditampilkan di Telegram.
-    Fallback ke teks asli kalau translate gagal, supaya notifikasi tetap terkirim."""
     if not text:
         return text
     try:
@@ -166,7 +162,7 @@ SOURCES = [
     },
     # ── Gate.io ──
     {
-        "name": "Gate.io",
+        "name": "Gate-io",
         "type": "gate_scrape",
         "url": "https://www.gate.com/announcements/lastest",
         "logo": "🔵",
@@ -259,7 +255,7 @@ def is_relevant(text):
 # ─── TELEGRAM SENDER ───────────────────────────────────────────────────────────
 def send_telegram(message):
     if not is_baseline_done():
-        return   # masih baseline, jangan kirim notifikasi apa pun
+        return
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": CHANNEL_ID,
@@ -324,7 +320,7 @@ def fetch_rss(source: dict):
     try:
         r = requests.get(source["url"], headers=HEADERS, timeout=15)
         r.raise_for_status()
-        feed = feedparser.parse(r.content)   # <-- parse dari content, bukan langsung URL
+        feed = feedparser.parse(r.content)
         log.info(f"   → status:{r.status_code} | {len(feed.entries)} artikel ditemukan")
         for entry in feed.entries:
             title   = entry.get("title", "")
@@ -498,9 +494,6 @@ def fetch_upbit_api(source):
             if not nid:
                 continue
  
-            # Cek field body/content kalau ternyata tersedia di response API.
-            # Kalau tidak ada field ini, body_text akan kosong dan filter jatuh
-            # ke title saja (perilaku sama seperti sebelumnya).
             body_text = (
                 n.get("content")
                 or n.get("body")
@@ -523,25 +516,13 @@ def fetch_upbit_api(source):
             time.sleep(1)
     except Exception as e:
         log.error(f"❌ Error API Upbit: {e}")
- 
- 
-# ─── OPSIONAL: fetch body sungguhan dari halaman detail notice ────────────────
-# Aktifkan kalau kamu mau cek isi lengkap notice (bukan cuma title), karena
-# API list Upbit kemungkinan besar TIDAK menyertakan body di response-nya.
-# Konsekuensi: 1 request tambahan per notice yang belum "seen", jadi jangan
-# dipakai untuk semua notice sekaligus, cukup untuk yang lolos filter title dulu.
+
  
 def fetch_upbit_notice_body(notice_id: str) -> str:
-    """Ambil isi body notice dari halaman detail Upbit (best-effort scrape)."""
     try:
         url = f"https://www.upbit.com/service_center/notice?id={notice_id}&view=share"
         r = requests.get(url, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(r.text, "html.parser")
-        # Upbit render halaman ini pakai JS (SPA), jadi requests+bs4 biasa
-        # kemungkinan besar TIDAK akan mendapat isi body (hanya shell HTML).
-        # Kalau butuh body asli, perlu headless browser (playwright/selenium)
-        # atau cari endpoint API detail-nya (bukan endpoint list yang dipakai
-        # sekarang). Fungsi ini disediakan sebagai starting point saja.
         body = soup.get_text(separator=" ", strip=True)
         return body
     except Exception as e:
@@ -550,7 +531,6 @@ def fetch_upbit_notice_body(notice_id: str) -> str:
 
 
 def fetch_bitget_scrape(source):
-    """Scrape halaman Announcements Bitget, filter suspending/resuming."""
     log.info(f"🕷️  Scrape: Bitget")
     try:
         r = requests.get(source["url"], headers=HEADERS, timeout=15)
@@ -613,8 +593,8 @@ if __name__ == "__main__":
 
     if not is_baseline_done():
         log.info("📋 Merekam pengumuman yang sudah ada (tanpa kirim)...")
-        check_all()              # baseline_done belum ada → semua send_telegram() di-skip, mark_seen() tetap jalan
-        set_baseline_done()      # ditulis ke DB, jadi tidak akan hilang meski Railway restart
+        check_all()
+        set_baseline_done()
         log.info("✅ Baseline selesai, mulai monitoring normal.")
     else:
         log.info("ℹ️ Baseline sudah pernah dijalankan sebelumnya, langsung mode normal.")
