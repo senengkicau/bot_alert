@@ -153,6 +153,14 @@ SOURCES = [
         "url": "https://www.okx.com/help/section/announcements-latest-announcements",
         "logo": "⚫",
     },
+    # ── Crypto.com ──
+    {
+        "name": "Crypto-com",
+        "type": "cryptocom_api",
+        "url": "https://static2.crypto.com/exchange/announcements_en.json",
+        "logo": "🔶",
+        "base_link": "https://crypto.com/exchange/announcements/all",
+    },
     # ── KuCoin ──
     {
         "name": "KuCoin",
@@ -407,6 +415,28 @@ def fetch_bitfinex_api(source):
         log.error(f"❌ Error API Bitfinex: {e}")
 
 
+def fetch_cryptocom_api(source):
+    log.info("🔌 Cek API: Crypto.com")
+    try:
+        r = requests.get(source["url"], headers=HEADERS, timeout=15)
+        announcements = r.json()
+        log.info(f"   → {len(announcements)} artikel ditemukan")
+        for a in announcements:
+            aid   = a.get("id", "")
+            title = a.get("title", "")
+            if not aid or not is_relevant(title):
+                continue
+            uid = f"cryptocom_{aid}"
+            if is_seen(uid):
+                continue
+            mark_seen(uid)
+            link = source["base_link"]
+            send_telegram(format_message(source["logo"], source["name"], title, link))
+            time.sleep(1)
+    except Exception as e:
+        log.error(f"❌ Error API Crypto.com: {e}")
+
+
 def fetch_kucoin_api(source):
     log.info("🔌 Cek API: KuCoin")
     try:
@@ -574,6 +604,8 @@ def check_all():
             fetch_rss(source)
         elif t == "gate_scrape":
             fetch_gate_scrape(source)
+        elif source["type"] == "cryptocom_api":
+            fetch_cryptocom_api(source)
         elif t == "kucoin_api":
             fetch_kucoin_api(source)
         elif t == "bitget_scrape":
