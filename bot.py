@@ -23,7 +23,7 @@ if not BOT_TOKEN or not CHANNEL_ID:
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
 
-GATE_BUILD_ID = "wGy7rc-vSsE-as6JsrTaf"
+GATE_BUILD_ID = "3Zf97EUILJLKpKDqZJ-T7"
 
 HEADERS_GATE = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
