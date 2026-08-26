@@ -88,11 +88,31 @@ def is_relevant_upbit(text: str) -> bool:
     return any(kw.lower() in text_lower for kw in UPBIT_KEYWORDS)
  
  
+# ─── TRANSLATION HELPER ────────────────────────────────────────────────────────
+BAD_TRANSLATION_MARKERS = [
+    "that's an error", "that’s an error",
+    "error 500", "error 404", "error 403",
+    "that's all we know", "that’s all we know",
+    "<html", "<!doctype", "<body",
+]
+
+def _is_bad_translation(result: str, original: str) -> bool:
+    if not result:
+        return True
+    if len(result) > max(200, len(original) * 5):
+        return True
+    low = result.lower()
+    return any(marker in low for marker in BAD_TRANSLATION_MARKERS)
+
 def translate_to_en(text: str) -> str:
     if not text:
         return text
     try:
-        return GoogleTranslator(source="auto", target="en").translate(text)
+        result = GoogleTranslator(source="auto", target="en").translate(text)
+        if _is_bad_translation(result, text):
+            log.warning(f"⚠️ Hasil translate mencurigakan, pakai judul asli. Raw: {str(result)[:80]}")
+            return text
+        return result
     except Exception as e:
         log.error(f"⚠️ Gagal translate Upbit title: {e}")
         return text
