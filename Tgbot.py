@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────────
 BOT_TOKEN     = os.environ.get("BOT_TOKEN")
-CHANNEL_ID    = os.environ.get("LISTING_CHANNEL_ID")
+CHANNEL_ID    = os.environ.get("CHANNEL_ID")
 DEEPL_API_KEY = os.environ.get("DEEPL_API_KEY")
 CHECK_EVERY   = 2
 DB_PATH       = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH", ".") + "/seen_listing.db"
